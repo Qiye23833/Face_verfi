@@ -55,7 +55,7 @@ class MainWindow(QMainWindow):
 
         # 右侧信息显示区域
         info_layout = QVBoxLayout()
-        self.info_label = QLabel('人员信息')
+        self.info_label = QLabel('人员识别信息')
         info_layout.addWidget(self.info_label)
         main_layout.addLayout(info_layout)
         
