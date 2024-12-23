@@ -11,7 +11,7 @@ def main():
     """
     # 创建QT应用程序实例
     app = QApplication(sys.argv)
-    
+
     # 初始化检测器和增强器
     detector = FaceDetector()  # 创建人体检测器实例
     enhancer = ImageEnhancer()  # 创建图像增强器实例
