@@ -94,3 +94,48 @@ class FaceDatabase:
         if max_similarity >= threshold:
             return best_match
         return None 
+    
+    def update_name(self, face_id, new_name):
+        """更新人脸姓名"""
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE faces SET name = ? WHERE id = ?', (new_name, face_id))
+        self.conn.commit()
+    
+    def update_id(self, old_id, new_id):
+        """更新人脸ID"""
+        cursor = self.conn.cursor()
+        cursor.execute('UPDATE faces SET id = ? WHERE id = ?', (new_id, old_id))
+        self.conn.commit()
+    
+    def id_exists(self, face_id):
+        """检查ID是否已存在"""
+        cursor = self.conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM faces WHERE id = ?', (face_id,))
+        return cursor.fetchone()[0] > 0
+    
+    def add_empty_face(self, face_id, name):
+        """添加新的空人脸记录"""
+        cursor = self.conn.cursor()
+        # 使用空的特征向量
+        empty_features = np.zeros(128)  # 使用128维的零向量
+        cursor.execute(
+            'INSERT INTO faces (id, name, feature_vector) VALUES (?, ?, ?)',
+            (face_id, name, pickle.dumps(empty_features))
+        )
+        self.conn.commit()
+    
+    def add_face_with_id(self, id, name, feature_vector, face_image=None):
+        """
+        添加带指定ID的人脸信息到数据库
+        Args:
+            id: 指定的ID
+            name: 人名
+            feature_vector: 人脸特征向量
+            face_image: 人脸图像数据
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            'INSERT INTO faces (id, name, feature_vector, face_image) VALUES (?, ?, ?, ?)',
+            (id, name, pickle.dumps(feature_vector), face_image)
+        )
+        self.conn.commit()

@@ -47,26 +47,38 @@ class FaceProcessor:
             return self.last_detection
             
         try:
-            # 缩小图像以加快处理速度
-            scale = 0.5
-            small_image = cv2.resize(image, (0, 0), fx=scale, fy=scale)
+            # 增强图像
+            enhanced_image = cv2.convertScaleAbs(image, alpha=1.2, beta=10)  # 提高亮度和对比度
             
             # 转换为灰度图像
-            gray = cv2.cvtColor(small_image, cv2.COLOR_BGR2GRAY)
+            gray = cv2.cvtColor(enhanced_image, cv2.COLOR_BGR2GRAY)
             
-            # 人脸检测
-            faces = self.detector(gray)
+            # 使用多个尺度进行人脸检测
+            faces = self.detector(gray, 1)  # 增加第二个参数，表示上采样次数，提高检测小人脸的能力
             
-            # 转换为numpy数组格式的边界框，并调整回原始尺寸
+            # 转换为numpy数组格式的边界框
             face_boxes = []
             for face in faces:
-                x1 = int(face.left() / scale)
-                y1 = int(face.top() / scale)
-                x2 = int(face.right() / scale)
-                y2 = int(face.bottom() / scale)
+                # 扩大检测框，以包含更多面部区域
+                x1 = max(0, face.left() - 10)
+                y1 = max(0, face.top() - 20)
+                x2 = min(image.shape[1], face.right() + 10)
+                y2 = min(image.shape[0], face.bottom() + 10)
                 face_boxes.append([x1, y1, x2, y2, 1.0])
             
             face_boxes = np.array(face_boxes)
+            
+            # 如果没有检测到人脸，尝试使用更宽松的参数
+            if len(face_boxes) == 0:
+                faces = self.detector(gray, 2)  # 增加上采样次数
+                face_boxes = []
+                for face in faces:
+                    x1 = max(0, face.left() - 20)
+                    y1 = max(0, face.top() - 30)
+                    x2 = min(image.shape[1], face.right() + 20)
+                    y2 = min(image.shape[0], face.bottom() + 20)
+                    face_boxes.append([x1, y1, x2, y2, 1.0])
+                face_boxes = np.array(face_boxes)
             
             # 更新缓存
             self.last_detection = face_boxes
