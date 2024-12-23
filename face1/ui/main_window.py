@@ -1,7 +1,9 @@
-from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                            QPushButton, QLabel, QFileDialog)
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QImage, QPixmap
 import cv2
+import os
 
 class MainWindow(QMainWindow):
     """
@@ -20,7 +22,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.detector = detector
         self.enhancer = enhancer
-        self.camera_is_running = False  # 添加摄像头状态标志
+        self.camera_is_running = False
+        self.current_image = None  # 存储当前显示的图像
         self.setup_ui()
         self.setup_camera()
         
@@ -43,14 +46,28 @@ class MainWindow(QMainWindow):
         # 设置视频显示区域
         self.video_label = QLabel()
         self.video_label.setFixedSize(800, 600)
-        self.video_label.setStyleSheet("border: 2px solid gray;")  # 添加边框
+        self.video_label.setStyleSheet("border: 2px solid gray;")
         left_layout.addWidget(self.video_label)
         
-        # 添加控制按钮
+        # 添加按钮布局
+        button_layout = QHBoxLayout()
+        
+        # 摄像头控制按钮
         self.camera_button = QPushButton('开启摄像头')
         self.camera_button.clicked.connect(self.toggle_camera)
-        left_layout.addWidget(self.camera_button)
+        button_layout.addWidget(self.camera_button)
         
+        # 加载图片按钮
+        self.load_button = QPushButton('加载图片')
+        self.load_button.clicked.connect(self.load_image)
+        button_layout.addWidget(self.load_button)
+        
+        # 保存图片按钮
+        self.save_button = QPushButton('保存图片')
+        self.save_button.clicked.connect(self.save_image)
+        button_layout.addWidget(self.save_button)
+        
+        left_layout.addLayout(button_layout)
         main_layout.addLayout(left_layout)
 
         # 右侧信息显示区域
@@ -100,6 +117,66 @@ class MainWindow(QMainWindow):
         self.camera_button.setText('开启摄像头')
         self.video_label.setText('摄像头已关闭')
 
+    def load_image(self):
+        """
+        加载图片功能
+        打开文件对话框选择图片文件并显示
+        """
+        # 停止摄像头（如果正在运行）
+        if self.camera_is_running:
+            self.stop_camera()
+            
+        # 打开文件对话框
+        file_name, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择图片",
+            "",
+            "图片文件 (*.png *.jpg *.jpeg *.bmp);;所有文件 (*.*)"
+        )
+        
+        if file_name:
+            # 读取图片
+            frame = cv2.imread(file_name)
+            if frame is not None:
+                # 图像增强
+                enhanced_frame = self.enhancer.enhance(frame)
+                
+                # 人体检测
+                results = self.detector.detect(enhanced_frame)
+                annotated_frame = self.detector.draw_detections(results)
+                
+                # 保存当前图像
+                self.current_image = annotated_frame
+                
+                # 显示处理后的图像
+                self.display_frame(annotated_frame)
+            else:
+                self.video_label.setText('无法加载图片')
+                
+    def save_image(self):
+        """
+        保存图片功能
+        打开文件对话框选择保存位置并保存当前图像
+        """
+        if self.current_image is None:
+            return
+            
+        # 打开保存文件对话框
+        file_name, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存图片",
+            "",
+            "PNG图片 (*.png);;JPG图片 (*.jpg);;所有文件 (*.*)"
+        )
+        
+        if file_name:
+            # 确保文件名有正确的扩展名
+            if not any(file_name.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg']):
+                file_name += '.png'
+                
+            # 保存图片
+            cv2.imwrite(file_name, self.current_image)
+            
     def update_frame(self):
         """
         更新视频帧
@@ -115,9 +192,12 @@ class MainWindow(QMainWindow):
                 results = self.detector.detect(enhanced_frame)
                 annotated_frame = self.detector.draw_detections(results)
                 
+                # 保存当前图像
+                self.current_image = annotated_frame
+                
                 # 显示处理后的图像
                 self.display_frame(annotated_frame)
-            
+
     def display_frame(self, frame):
         """
         在界面上显示图像
