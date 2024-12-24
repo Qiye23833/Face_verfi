@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                             QScrollArea, QWidget, QPushButton, QGridLayout,
-                            QLineEdit, QInputDialog, QMessageBox)
+                            QLineEdit, QInputDialog, QMessageBox, QFormLayout)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage, QPixmap
 import cv2
@@ -61,60 +61,102 @@ class FaceDBWindow(QDialog):
     def load_faces(self):
         """加载并显示所有人脸信息"""
         # 获取所有人脸信息
-        faces = self.face_db.get_all_faces_with_images()
+        faces = self.face_db.get_all_faces_with_info()  # 修改为获取完整信息
         
         # 清除现有内容
         for i in reversed(range(self.content_layout.count())): 
             self.content_layout.itemAt(i).widget().setParent(None)
             
         # 显示人脸信息
-        for row, (id, name, feature_vector, face_image) in enumerate(faces):
+        for row, face_info in enumerate(faces):
             # 创建人脸信息容器
             face_widget = QWidget()
             face_layout = QVBoxLayout(face_widget)
             
             # 显示人脸图像
-            if face_image is not None:
-                img_array = np.frombuffer(face_image, np.uint8)
+            if face_info['face_image'] is not None:
+                img_array = np.frombuffer(face_info['face_image'], np.uint8)
                 img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                h, w, ch = img.shape
-                bytes_per_line = ch * w
-                q_img = QImage(img.data, w, h, bytes_per_line, QImage.Format_RGB888)
-                pixmap = QPixmap.fromImage(q_img)
+                
+                # 创建图像标签并设置固定大小
                 img_label = QLabel()
-                img_label.setPixmap(pixmap.scaled(100, 100, Qt.KeepAspectRatio))
+                img_label.setFixedSize(200, 200)
+                img_label.setAlignment(Qt.AlignCenter)
+                
+                # 计算缩放比例
+                h, w = img.shape[:2]
+                scale = min(180/w, 180/h)
+                new_size = (int(w * scale), int(h * scale))
+                
+                # 缩放图像
+                resized_img = cv2.resize(img, new_size)
+                
+                # 创建白色背景
+                background = np.full((200, 200, 3), 255, dtype=np.uint8)
+                
+                # 计算居中位置
+                x_offset = (200 - new_size[0]) // 2
+                y_offset = (200 - new_size[1]) // 2
+                
+                # 将图像放在背景中央
+                background[y_offset:y_offset+new_size[1], 
+                          x_offset:x_offset+new_size[0]] = resized_img
+                
+                # 转换为QPixmap并显示
+                h, w = background.shape[:2]
+                bytes_per_line = 3 * w
+                q_img = QImage(background.data, w, h, bytes_per_line, QImage.Format_RGB888)
+                img_label.setPixmap(QPixmap.fromImage(q_img))
                 face_layout.addWidget(img_label)
             
-            # ID输入框
-            id_layout = QHBoxLayout()
-            id_label = QLabel("ID:")
-            id_edit = QLineEdit(str(id))
-            id_edit.setReadOnly(True)  # ID只读
-            id_layout.addWidget(id_label)
-            id_layout.addWidget(id_edit)
-            face_layout.addLayout(id_layout)
+            # 创建表单布局显示所有信息
+            form_layout = QFormLayout()
+            
+            # ID显示
+            id_edit = QLineEdit(str(face_info['id']))
+            id_edit.setReadOnly(True)
+            form_layout.addRow('ID:', id_edit)
             
             # 姓名输入框
-            name_layout = QHBoxLayout()
-            name_label = QLabel("姓名:")
-            name_edit = QLineEdit(name)
-            name_edit.textChanged.connect(lambda text, id=id: self.update_name(id, text))
-            name_layout.addWidget(name_label)
-            name_layout.addWidget(name_edit)
-            face_layout.addLayout(name_layout)
+            name_edit = QLineEdit(face_info['name'])
+            name_edit.textChanged.connect(
+                lambda text, id=face_info['id']: self.update_name(id, text))
+            form_layout.addRow('姓名:', name_edit)
+            
+            # 性别显示
+            gender_label = QLabel(face_info.get('gender', ''))
+            form_layout.addRow('性别:', gender_label)
+            
+            # 岗位显示
+            position_label = QLabel(face_info.get('position', ''))
+            form_layout.addRow('岗位:', position_label)
+            
+            # 部门显示
+            department_label = QLabel(face_info.get('department', ''))
+            form_layout.addRow('部门:', department_label)
+            
+            # 人员类型显示
+            type_label = QLabel(face_info.get('person_type', ''))
+            form_layout.addRow('人员类型:', type_label)
+            
+            # 进驻时间显示
+            entry_date_label = QLabel(face_info.get('entry_date', ''))
+            form_layout.addRow('进驻时间:', entry_date_label)
+            
+            face_layout.addLayout(form_layout)
             
             # 按钮布局
             button_layout = QHBoxLayout()
             
             # 编辑ID按钮
             edit_id_btn = QPushButton("修改ID")
-            edit_id_btn.clicked.connect(lambda _, old_id=id: self.edit_id(old_id))
+            edit_id_btn.clicked.connect(lambda _, old_id=face_info['id']: self.edit_id(old_id))
             button_layout.addWidget(edit_id_btn)
             
             # 删除按钮
             delete_btn = QPushButton("删除")
-            delete_btn.clicked.connect(lambda _, id=id: self.delete_face(id))
+            delete_btn.clicked.connect(lambda _, id=face_info['id']: self.delete_face(id))
             button_layout.addWidget(delete_btn)
             
             face_layout.addLayout(button_layout)

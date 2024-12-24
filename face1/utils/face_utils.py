@@ -68,18 +68,18 @@ class FaceProcessor:
             
             face_boxes = np.array(face_boxes)
             
-            # 如果没有检测到人脸，尝试使用更宽松的参数
-            if len(face_boxes) == 0:
-                faces = self.detector(gray, 2)  # 增加上采样次数
-                face_boxes = []
-                for face in faces:
-                    x1 = max(0, face.left() - 20)
-                    y1 = max(0, face.top() - 30)
-                    x2 = min(image.shape[1], face.right() + 20)
-                    y2 = min(image.shape[0], face.bottom() + 20)
-                    face_boxes.append([x1, y1, x2, y2, 1.0])
-                face_boxes = np.array(face_boxes)
-            
+            # # 如果没有检测到人脸，尝试使用更宽松的参数
+            # if len(face_boxes) == 0:
+            #     faces = self.detector(gray, 2)  # 增加上采样次数
+            #     face_boxes = []
+            #     for face in faces:
+            #         x1 = max(0, face.left() - 20)
+            #         y1 = max(0, face.top() - 30)
+            #         x2 = min(image.shape[1], face.right() + 20)
+            #         y2 = min(image.shape[0], face.bottom() + 20)
+            #         face_boxes.append([x1, y1, x2, y2, 1.0])
+            #     face_boxes = np.array(face_boxes)
+            #
             # 更新缓存
             self.last_detection = face_boxes
             self.last_detection_time = current_time
@@ -107,6 +107,23 @@ class FaceProcessor:
             # 获取人脸关键点
             shape = self.get_landmarks(image, face_box)
             if shape is None:
+                return None
+            
+            # 检查关键点的分布是否合理
+            points = np.array([[p.x, p.y] for p in shape.parts()])
+            
+            # 计算眼睛区域的关键点
+            left_eye = points[36:42].mean(axis=0)
+            right_eye = points[42:48].mean(axis=0)
+            
+            # 计算眼睛间距与人脸宽度的比例
+            eye_distance = np.linalg.norm(right_eye - left_eye)
+            face_width = face_box[2] - face_box[0]
+            eye_ratio = eye_distance / face_width
+            
+            # 检查眼睛间距是否合理（一般在0.3-0.5之间）
+            if not (0.3 <= eye_ratio <= 0.5):
+                print(f"Invalid eye distance ratio: {eye_ratio:.2f}")
                 return None
             
             # 提取特征

@@ -14,17 +14,53 @@ class FaceDatabase:
     def create_tables(self):
         """创建必要的数据表"""
         cursor = self.conn.cursor()
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS faces (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            feature_vector BLOB NOT NULL,
-            face_image BLOB,
-            create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-        ''')
-        self.conn.commit()
         
+        try:
+            # 检查表是否存在
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='faces'")
+            table_exists = cursor.fetchone() is not None
+            
+            if not table_exists:
+                # 如果表不存在，创建新表
+                cursor.execute('''
+                CREATE TABLE faces (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    gender TEXT,
+                    position TEXT,
+                    department TEXT,
+                    person_type TEXT,
+                    entry_date TEXT,
+                    feature_vector BLOB NOT NULL,
+                    face_image BLOB,
+                    create_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
+            else:
+                # 如果表存在，检查并添加缺失的列
+                cursor.execute('PRAGMA table_info(faces)')
+                existing_columns = [column[1] for column in cursor.fetchall()]
+                
+                # 需要添加的新列
+                new_columns = {
+                    'gender': 'TEXT',
+                    'position': 'TEXT',
+                    'department': 'TEXT',
+                    'person_type': 'TEXT',
+                    'entry_date': 'TEXT'
+                }
+                
+                # 添加缺失的列
+                for column_name, column_type in new_columns.items():
+                    if column_name not in existing_columns:
+                        cursor.execute(f'ALTER TABLE faces ADD COLUMN {column_name} {column_type}')
+            
+            self.conn.commit()
+            
+        except sqlite3.Error as e:
+            print(f"Database error: {str(e)}")
+            raise Exception("数据库初始化失败")
+    
     def add_face(self, name, feature_vector, face_image=None):
         """
         添加人脸信息到数据库
@@ -66,7 +102,7 @@ class FaceDatabase:
     
     def match_face(self, feature_vector, threshold=0.6):
         """
-        将输入的人脸特征与数据库中的特征进行匹配
+        将输入的人脸特征与数据库中特征进行匹配
         Args:
             feature_vector: 输入的人脸特征向量
             threshold: 匹配阈值，越小越严格
@@ -139,3 +175,87 @@ class FaceDatabase:
             (id, name, pickle.dumps(feature_vector), face_image)
         )
         self.conn.commit()
+    
+    def add_face_with_info(self, info, feature_vector, face_image=None):
+        """
+        添加带完整信息的人脸到数据库
+        Args:
+            info: 包含人脸信息的字典
+            feature_vector: 人脸特征向量
+            face_image: 人脸图像数据
+        """
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                '''INSERT INTO faces (
+                    id, name, gender, position, department, 
+                    person_type, entry_date, feature_vector, face_image
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (
+                    info['id'], info['name'], info['gender'], 
+                    info['position'], info['department'], info['type'],
+                    info['entry_date'], pickle.dumps(feature_vector), face_image
+                )
+            )
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print(f"Database error: {str(e)}")
+            raise Exception("数据库操作失败")
+        except Exception as e:
+            print(f"Error saving face: {str(e)}")
+            raise Exception("保存人脸信息失败")
+    
+    def get_all_faces_with_info(self):
+        """获取���有已注册的人脸完整信息"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT id, name, gender, position, department, 
+                   person_type, entry_date, feature_vector, face_image, create_time 
+            FROM faces
+        ''')
+        results = cursor.fetchall()
+        
+        faces = []
+        for row in results:
+            face_info = {
+                'id': row[0],
+                'name': row[1],
+                'gender': row[2] or '',
+                'position': row[3] or '',
+                'department': row[4] or '',
+                'person_type': row[5] or '',
+                'entry_date': row[6] or '',
+                'feature_vector': pickle.loads(row[7]),
+                'face_image': row[8],
+                'create_time': row[9]
+            }
+            faces.append(face_info)
+        
+        return faces
+    
+    def get_face_info(self, face_id):
+        """获取指定ID的人脸完整信息"""
+        cursor = self.conn.cursor()
+        cursor.execute('''
+            SELECT id, name, gender, position, department, 
+                   person_type, entry_date, feature_vector, face_image, create_time 
+            FROM faces 
+            WHERE id = ?
+        ''', (face_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            face_info = {
+                'id': row[0],
+                'name': row[1],
+                'gender': row[2] or '',
+                'position': row[3] or '',
+                'department': row[4] or '',
+                'person_type': row[5] or '',
+                'entry_date': row[6] or '',
+                'feature_vector': pickle.loads(row[7]),
+                'face_image': row[8],
+                'create_time': row[9]
+            }
+            return face_info
+        return None
